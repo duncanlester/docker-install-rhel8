@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  # Example 1: Mount local certs directory as a volume
+  testcafe-volume:
+    image: testcafe/testcafe
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["while true; do sleep 1000; done"]
+    environment:
+      - SHELL=/bin/bash
+    volumes:
+      - ./:/tests
+      - ./certs:/certs:ro  # Mount local certs directory as read-only
+    working_dir: /tests
+
+  # Example 2: Copy certs into the container during build
+  testcafe-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.testcafe
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["while true; do sleep 1000; done"]
+    environment:
+      - SHELL=/bin/bash
+    volumes:
+      - ./:/tests
+    working_dir: /tests

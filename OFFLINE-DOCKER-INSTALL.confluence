@@ -1,0 +1,61 @@
+h1. Offline Docker Install Script for RHEL 8
+
+h2. Overview
+This script automates the offline installation of Docker and related components on RHEL 8. It sets up a local DNF repository from a directory of RPMs, installs Docker and its plugins, and configures fapolicyd rules.
+
+h2. Prerequisites
+* RHEL 8 system
+* All required Docker RPMs (including dependencies) downloaded to a local directory
+* Root privileges
+
+h2. Usage
+
+# Copy all Docker-related RPMs (docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin, docker-scan-plugin, docker-buildx-plugin, and dependencies) to a directory on your RHEL 8 machine.
+# Run the script as root:
+{code:bash}
+chmod +x offline-docker-install.sh
+sudo ./offline-docker-install.sh
+{code}
+# When prompted, enter the full path to the directory containing your RPMs.
+
+h2. What the Script Does
+
+# Prompts for the RPM directory location.
+# Installs 'createrepo' if not already present.
+# Creates a local DNF repository from the RPMs.
+# Configures a local repo file in /etc/yum.repos.d/.
+# Cleans and updates the DNF cache.
+# Installs Docker and related packages from the local repo:
+** docker-ce
+** docker-ce-cli
+** containerd.io
+** docker-compose-plugin
+** docker-scan-plugin
+** docker-buildx-plugin
+# Adds fapolicyd rules to allow Docker binaries to run.
+# Reloads fapolicyd.
+# Enables and starts the Docker service.
+
+h2. Example Output
+
+{code}
+Enter the full path to the directory containing Docker RPMs: /opt/docker-rpms
+Creating local DNF repository...
+Configuring local DNF repository...
+Installing Docker and related packages from local repository...
+Adding fapolicyd rules for Docker...
+Reloading fapolicyd...
+Enabling and starting Docker...
+Offline Docker installation complete!
+{code}
+
+h2. Troubleshooting
+
+* Ensure all required RPMs and dependencies are present in the directory.
+* If Docker fails to start, check the output of {code}systemctl status docker{code}.
+* For fapolicyd issues, review /etc/fapolicyd/rules.d/99-docker.rules.
+
+h2. See Also
+
+* [Docker Engine RPMs | Docker Docs|https://docs.docker.com/engine/install/rhel/]
+* [fapolicyd documentation|https://linux.die.net/man/8/fapolicyd]

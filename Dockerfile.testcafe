@@ -1,0 +1,8 @@
+# Dockerfile for testcafe-build service
+FROM testcafe/testcafe
+
+# Copy certs from build context into /certs in the container
+COPY certs/ /certs/
+
+# Set working directory
+WORKDIR /tests

@@ -1,0 +1,24 @@
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore editor/project files
+.vscode/
+.idea/
+*.swp
+
+# Ignore RPMs and local repos
+*.rpm
+/opt/docker-rpms/
+
+# Ignore log files
+*.log
+
+# Ignore backup and temp files
+*~
+*.bak
+*.tmp
+
+# Ignore shell history files
+.bash_history
+.zsh_history
