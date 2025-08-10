@@ -1,0 +1,7 @@
+services:
+  bats:
+    image: bats/bats:latest
+    volumes:
+      - ./:/code
+    working_dir: /code
+    entrypoint: ["bats", "tests/offline-docker-install.bats"]
