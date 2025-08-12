@@ -1,0 +1,78 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "/path/to/allowed/directory:/data",
+        "mcp/filesystem-server",
+        "/data"
+      ]
+    },
+    "brave-search": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e",
+        "BRAVE_API_KEY=your-brave-api-key-here",
+        "mcp/brave-search-server"
+      ],
+      "env": {
+        "BRAVE_API_KEY": "your-brave-api-key-here"
+      }
+    },
+    "git": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "/path/to/git/repository:/repo",
+        "mcp/git-server",
+        "--repository",
+        "/repo"
+      ]
+    },
+    "postgres": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--network",
+        "host",
+        "mcp/postgres-server",
+        "postgresql://username:password@localhost:5432/database"
+      ]
+    },
+    "sqlite": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "/path/to/database.db:/database.db",
+        "mcp/sqlite-server",
+        "/database.db"
+      ]
+    },
+    "fetch": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--network",
+        "host",
+        "mcp/fetch-server"
+      ]
+    }
+  }
+}
