@@ -23,6 +23,11 @@ allow perm=execute all : path=/tmp/jenkins-*.jar
 allow perm=execute all : path=/home/*/jenkins-*.jar
 allow perm=execute all : path=/var/lib/jenkins/jenkins-*.jar
 
+# Jenkins agent jar execution
+allow perm=execute all : path=/apps/*
+allow perm=execute all : path=/data/*/*.jar
+allow perm=execute all : path=/var/lib/jenkins/jenkins-*.jar
+
 # Common build tools
 allow perm=execute all : dir=/usr/bin/ name=git
 allow perm=execute all : dir=/usr/bin/ name=mvn
@@ -77,7 +82,7 @@ allow perm=execute all : path=/tmp/jenkins-*
 EOF
 
 echo "Reloading fapolicyd with new Jenkins rules..."
-systemctl reload fapolicyd
+systemctl restart fapolicyd
 
 echo "Jenkins fapolicyd rules have been added to $JENKINS_RULES_FILE"
 echo ""
