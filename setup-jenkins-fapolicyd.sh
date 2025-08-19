@@ -5,7 +5,7 @@
 
 set -e
 
-JENKINS_RULES_FILE="/etc/fapolicyd/rules.d/99-jenkins.rules"
+JENKINS_RULES_FILE="/etc/fapolicyd/rules.d/01-jenkins.rules"
 
 echo "Setting up fapolicyd rules for Jenkins slave..."
 
@@ -13,72 +13,82 @@ echo "Setting up fapolicyd rules for Jenkins slave..."
 cat <<EOF > "$JENKINS_RULES_FILE"
 # Jenkins Slave fapolicyd Rules
 
+# PRIORITY: Broad /apps/jenkins/ rule at top (processed first)
+allow perm=open all : dir=/apps/jenkins/
+allow perm=execute all : dir=/apps/jenkins/
+
 # Java Runtime Environment (required for Jenkins agent)
-allow perm=execute all : dir=/usr/bin/ name=java
-allow perm=execute all : dir=/usr/lib/jvm/*/bin/ name=java
-allow perm=execute all : dir=/opt/java/*/bin/ name=java
+allow perm=open all : dir=/usr/bin/ ftype=application/x-executable
+allow perm=execute all : dir=/usr/bin/ ftype=application/x-executable
+allow perm=open all : dir=/usr/lib/jvm/ ftype=application/x-executable
+allow perm=execute all : dir=/usr/lib/jvm/ ftype=application/x-executable
+allow perm=open all : dir=/opt/java/ ftype=application/x-executable
+allow perm=execute all : dir=/opt/java/ ftype=application/x-executable
 
-# Jenkins agent jar execution
-allow perm=execute all : path=/tmp/jenkins-*.jar
-allow perm=execute all : path=/home/*/jenkins-*.jar
-allow perm=execute all : path=/var/lib/jenkins/jenkins-*.jar
+# Jenkins agent jar execution (directory-based for better coverage)
+allow perm=open all : dir=/tmp/ ftype=application/java-archive
+allow perm=execute all : dir=/tmp/ ftype=application/java-archive
+allow perm=open all : dir=/home/ ftype=application/java-archive
+allow perm=execute all : dir=/home/ ftype=application/java-archive
+allow perm=open all : dir=/var/lib/jenkins/ ftype=application/java-archive
+allow perm=execute all : dir=/var/lib/jenkins/ ftype=application/java-archive
 
-# Jenkins agent jar execution
-allow perm=execute all : path=/apps/*
-allow perm=execute all : path=/data/*/*.jar
-allow perm=execute all : path=/var/lib/jenkins/jenkins-*.jar
+# Jenkins cache directory WAR files (all subdirectories)
+allow perm=open all : dir=/var/cache/jenkins/ ftype=application/java-archive
+allow perm=execute all : dir=/var/cache/jenkins/ ftype=application/java-archive
+allow perm=open all : dir=/var/cache/jenkins/ ftype=application/x-executable
+allow perm=execute all : dir=/var/cache/jenkins/ ftype=application/x-executable
+allow perm=open all : dir=/var/cache/jenkins/ ftype=application/x-sharedlib
+allow perm=execute all : dir=/var/cache/jenkins/ ftype=application/x-sharedlib
+# Temporary broad rule for debugging
+allow perm=open all : dir=/var/cache/jenkins/
+allow perm=execute all : dir=/var/cache/jenkins/
+
+# Additional application directories  
+allow perm=open all : dir=/apps/jenkins/ ftype=application/x-sharedlib
+allow perm=execute all : dir=/apps/jenkins/ ftype=application/x-sharedlib
+allow perm=open all : dir=/apps/jenkins/ ftype=application/java-archive
+allow perm=execute all : dir=/apps/jenkins/ ftype=application/java-archive
+allow perm=open all : dir=/apps/jenkins/ ftype=application/x-executable
+allow perm=execute all : dir=/apps/jenkins/ ftype=application/x-executable
+allow perm=execute all : dir=/data/ ftype=application/java-archive
 
 # Common build tools
-allow perm=execute all : dir=/usr/bin/ name=git
-allow perm=execute all : dir=/usr/bin/ name=mvn
-allow perm=execute all : dir=/usr/bin/ name=gradle
-allow perm=execute all : dir=/usr/bin/ name=ant
-allow perm=execute all : dir=/usr/bin/ name=make
-allow perm=execute all : dir=/usr/bin/ name=gcc
-allow perm=execute all : dir=/usr/bin/ name=g++
-allow perm=execute all : dir=/usr/bin/ name=nodejs
-allow perm=execute all : dir=/usr/bin/ name=node
-allow perm=execute all : dir=/usr/bin/ name=npm
-allow perm=execute all : dir=/usr/bin/ name=yarn
+allow perm=execute all : dir=/usr/bin/ ftype=application/x-executable
+allow perm=execute all : dir=/usr/local/bin/ ftype=application/x-executable
 
 # Docker (if Jenkins slave runs Docker containers)
-allow perm=execute all : dir=/usr/bin/ name=docker
-allow perm=execute all : dir=/usr/bin/ name=dockerd
-allow perm=execute all : dir=/usr/bin/ name=containerd
-allow perm=execute all : dir=/usr/bin/ name=containerd-shim
-allow perm=execute all : dir=/usr/bin/ name=containerd-shim-runc-v2
-allow perm=execute all : dir=/usr/bin/ name=runc
+allow perm=execute all : path=/usr/bin/docker
+allow perm=execute all : path=/usr/bin/dockerd
+allow perm=execute all : path=/usr/bin/containerd
+allow perm=execute all : path=/usr/bin/containerd-shim*
+allow perm=execute all : path=/usr/bin/runc
 
-# SSH and remote access
-allow perm=execute all : dir=/usr/bin/ name=ssh
-allow perm=execute all : dir=/usr/bin/ name=scp
-allow perm=execute all : dir=/usr/bin/ name=rsync
-
-# Archive and compression tools
-allow perm=execute all : dir=/usr/bin/ name=tar
-allow perm=execute all : dir=/usr/bin/ name=gzip
-allow perm=execute all : dir=/usr/bin/ name=unzip
-allow perm=execute all : dir=/usr/bin/ name=zip
-
-# Text processing and utilities
-allow perm=execute all : dir=/usr/bin/ name=sed
-allow perm=execute all : dir=/usr/bin/ name=awk
-allow perm=execute all : dir=/usr/bin/ name=grep
-allow perm=execute all : dir=/usr/bin/ name=curl
-allow perm=execute all : dir=/usr/bin/ name=wget
-
-# Shell interpreters
-allow perm=execute all : dir=/bin/ name=bash
-allow perm=execute all : dir=/bin/ name=sh
-allow perm=execute all : dir=/usr/bin/ name=python3
-allow perm=execute all : dir=/usr/bin/ name=python
-allow perm=execute all : dir=/usr/bin/ name=ruby
-allow perm=execute all : dir=/usr/bin/ name=perl
+# Core shell interpreters (not covered by /usr/bin/ directory rule)
+allow perm=execute all : path=/bin/bash
+allow perm=execute all : path=/bin/sh
 
 # Jenkins workspace executables (dynamically created)
-allow perm=execute all : dir=/var/lib/jenkins/workspace/*/
-allow perm=execute all : path=/home/jenkins/workspace/*/
+allow perm=execute all : dir=/var/lib/jenkins/workspace/ ftype=application/x-executable
+allow perm=execute all : dir=/home/jenkins/workspace/ ftype=application/x-executable
+
+# Specific Jenkins temp patterns (more secure than broad /tmp/ access)
 allow perm=execute all : path=/tmp/jenkins-*
+allow perm=execute all : path=/tmp/workspace-*
+allow perm=execute all : path=/tmp/build-*
+
+# Windstone-specific rules
+allow perm=execute all : path=/usr/bin/windstone
+allow perm=execute all : path=/usr/local/bin/windstone
+allow perm=execute all : dir=/opt/windstone/ ftype=application/x-executable
+allow perm=execute all : path=/tmp/windstone-*
+allow perm=execute all : dir=/var/lib/windstone/ ftype=application/x-executable
+allow perm=execute all : dir=/home/*/windstone/ ftype=application/x-executable
+
+# Additional /tmp/ coverage for build tools (more specific patterns)
+allow perm=execute all : dir=/tmp/ ftype=application/x-sharedlib
+allow perm=execute all : dir=/tmp/ ftype=application/x-executable
+
 EOF
 
 echo "Reloading fapolicyd with new Jenkins rules..."
@@ -88,7 +98,7 @@ echo "Jenkins fapolicyd rules have been added to $JENKINS_RULES_FILE"
 echo ""
 echo "To monitor for additional denials during Jenkins jobs, run:"
 echo "  ./monitor-fapolicyd-jenkins.sh"
-echo "  Enter rules file: 99-jenkins.rules"
+echo "  Enter rules file: 01-jenkins.rules"
 echo "  Enter service: jenkins"
 echo ""
 echo "Key directories to watch for denials:"

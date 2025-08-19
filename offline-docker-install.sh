@@ -179,12 +179,12 @@ dnf install -y --disablerepo="*" --enablerepo="${REPO_NAME}" \
 # 7. Add fapolicyd rules for Docker binaries
 echo "Adding fapolicyd rules for Docker..."
 cat <<EOF > /etc/fapolicyd/rules.d/99-docker.rules
-allow perm=execute all : dir=/usr/bin/ name=docker
-allow perm=execute all : dir=/usr/bin/ name=dockerd
-allow perm=execute all : dir=/usr/bin/ name=containerd
-allow perm=execute all : dir=/usr/bin/ name=containerd-shim
-allow perm=execute all : dir=/usr/bin/ name=containerd-shim-runc-v2
-allow perm=execute all : dir=/usr/bin/ name=runc
+allow perm=execute all : path=/usr/bin/docker
+allow perm=execute all : path=/usr/bin/dockerd
+allow perm=execute all : path=/usr/bin/containerd
+allow perm=execute all : path=/usr/bin/containerd-shim
+allow perm=execute all : path=/usr/bin/containerd-shim-runc-v2
+allow perm=execute all : path=/usr/bin/runc
 EOF
 
 
@@ -250,7 +250,7 @@ while read -r line; do
 				if [ -n "$BIN_PATH" ] && ! grep -q "$BIN_PATH" "$RULES_FILE"; then
 					BIN_NAME=$(basename "$BIN_PATH")
 					echo "Adding allow rule for $BIN_PATH ($BIN_NAME)"
-					echo "allow perm=execute all : dir=$(dirname $BIN_PATH)/ name=$BIN_NAME" >> "$RULES_FILE"
+					echo "allow perm=execute all : path=$BIN_PATH" >> "$RULES_FILE"
 					# Try reload first, restart if it fails
 					if ! systemctl reload fapolicyd; then
 						echo "Reload failed, restarting fapolicyd..."

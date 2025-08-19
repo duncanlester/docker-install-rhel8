@@ -39,11 +39,51 @@ if [ -z "$SERVICE" ]; then
   exit 1
 fi
 
+read -rp "Run monitoring in background? (y/n): " BACKGROUND_MODE
+if [[ "$BACKGROUND_MODE" =~ ^[Yy] ]]; then
+    BACKGROUND=true
+    echo "Will run monitoring in background - you can use terminal while it runs"
+else
+    BACKGROUND=false
+    echo "Will run monitoring in foreground - terminal will be blocked for 1 hour"
+fi
+
 echo "Starting fapolicyd monitoring for service: $SERVICE"
 
 # Stop fapolicyd service and run debug mode with permissive flag
 echo "Stopping fapolicyd service..."
 systemctl stop fapolicyd
+
+# Wait for service to fully stop and check for any remaining processes
+echo "Waiting for fapolicyd to fully stop..."
+sleep 5
+
+# Kill any remaining fapolicyd processes
+if pgrep -x fapolicyd >/dev/null; then
+    echo "Found remaining fapolicyd processes, terminating..."
+    pkill -x fapolicyd
+    sleep 3
+
+    # Force kill if still running
+    if pgrep -x fapolicyd >/dev/null; then
+        echo "Force killing remaining fapolicyd processes..."
+        pkill -9 -x fapolicyd
+        sleep 2
+    fi
+fi
+
+# Verify no fapolicyd processes are running
+if pgrep -x fapolicyd >/dev/null; then
+    echo "ERROR: Unable to stop all fapolicyd processes!"
+    exit 1
+fi
+
+echo "All fapolicyd processes stopped"
+
+# Check if fapolicyd kernel module is loaded and blocking
+if lsmod | grep -q fanotify; then
+    echo "Fanotify module is loaded (this is normal)"
+fi
 
 # Set fapolicyd to permissive mode so services can actually run while we develop rules
 echo "Setting fapolicyd to permissive mode..."
@@ -55,10 +95,33 @@ echo "Starting fapolicyd in debug-deny mode..."
 START_TIME=$(date +%s)
 MAX_MONITOR_TIME=3600  # 1 hour
 
+# Use a regular file instead of named pipe for better reliability
 fapolicyd --debug-deny --permissive > /tmp/fapolicyd_output 2>&1 &
 FAPOLICYD_PID=$!
 
-sleep 120  # Wait for initialization
+echo "Started fapolicyd debug process (PID: $FAPOLICYD_PID)"
+
+# Give fapolicyd time to initialize but check it's working
+echo "Waiting for fapolicyd to initialize..."
+sleep 10
+
+# Check if the process started successfully
+if ! kill -0 $FAPOLICYD_PID 2>/dev/null; then
+    echo "ERROR: fapolicyd debug process failed to start!"
+    echo "Checking output for errors..."
+    cat /tmp/fapolicyd_output 2>/dev/null || echo "No output captured"
+    exit 1
+fi
+
+# Test that permissive mode is working - try a simple command
+echo "Testing permissive mode..."
+if timeout 10 /bin/ls /tmp > /dev/null 2>&1; then
+    echo "Permissive mode working - basic commands execute"
+else
+    echo "Warning: Basic commands may still be blocked"
+fi
+
+sleep 110  # Additional wait for full initialization
 
 # Restart the service after debug mode is ready
 if [ "$SERVICE" != "all" ] && systemctl list-unit-files | grep -q "^${SERVICE}.service"; then
@@ -87,22 +150,39 @@ fi
             break
         fi
 
-        # Read from fapolicyd with timeout to prevent hanging
-        if IFS= read -t 5 -r line < /tmp/fapolicyd_output 2>/dev/null; then
-            if echo "$line" | grep -q 'decide access=execute.*denied'; then
-                    BIN_PATH=$(echo "$line" | awk -F 'path=' '{if (NF>1) print $2}' | awk '{print $1}')
-                    BIN_NAME=$(basename "$BIN_PATH")
+        # Check for new denial lines in the output file
+        if [ -f /tmp/fapolicyd_output ]; then
+            # Get new lines since last check (using a position file)
+            LAST_POS_FILE="/tmp/fapolicyd_monitor_pos"
+            [ ! -f "$LAST_POS_FILE" ] && echo "0" > "$LAST_POS_FILE"
 
-                    # Check if this denial is related to our service
-                    if [ "$SERVICE" = "all" ] || [[ "$BIN_NAME" == *"$SERVICE"* ]] || [[ "$BIN_PATH" == *"$SERVICE"* ]]; then
-                            # Add rule if binary path exists and not already in rules file
-                            if [ -n "$BIN_PATH" ] && ! grep -Fq "$BIN_NAME" "$RULES_FILE"; then
-                                    echo "Adding allow rule for $BIN_PATH ($BIN_NAME)"
-                                    echo "allow perm=execute all : dir=$(dirname "$BIN_PATH")/ name=$BIN_NAME" >> "$RULES_FILE"
+            LAST_POS=$(cat "$LAST_POS_FILE")
+            CURRENT_SIZE=$(stat -c%s /tmp/fapolicyd_output 2>/dev/null || echo "0")
+
+            if [ "$CURRENT_SIZE" -gt "$LAST_POS" ]; then
+                # Read new content from last position
+                tail -c +$((LAST_POS + 1)) /tmp/fapolicyd_output | while IFS= read -r line; do
+                    if echo "$line" | grep -q 'decide access=execute.*denied'; then
+                            echo "DENIAL: $line"
+                            BIN_PATH=$(echo "$line" | awk -F 'path=' '{if (NF>1) print $2}' | awk '{print $1}')
+                            BIN_NAME=$(basename "$BIN_PATH")
+
+                            # Check if this denial is related to our service
+                            if [ "$SERVICE" = "all" ] || [[ "$BIN_NAME" == *"$SERVICE"* ]] || [[ "$BIN_PATH" == *"$SERVICE"* ]]; then
+                                    # Add rule if binary path exists and not already in rules file
+                                    if [ -n "$BIN_PATH" ] && ! grep -Fq "$BIN_PATH" "$RULES_FILE"; then
+                                            echo "Adding allow rule for $BIN_PATH ($BIN_NAME)"
+                                            echo "allow perm=execute all : path=$BIN_PATH" >> "$RULES_FILE"
+                                    fi
                             fi
                     fi
+                done
+                # Update position
+                echo "$CURRENT_SIZE" > "$LAST_POS_FILE"
             fi
         fi
+
+        sleep 1  # Small delay to prevent excessive CPU usage
 
         # Show progress every 5 minutes
         if [ $((TOTAL_TIME % 300)) -eq 0 ] && [ $TOTAL_TIME -gt 0 ]; then
@@ -119,24 +199,40 @@ cleanup() {
     kill $FAPOLICYD_PID 2>/dev/null
     kill $MONITOR_PID 2>/dev/null
     rm -f /tmp/fapolicyd_output
+    rm -f /tmp/fapolicyd_monitor_pos
 }
 trap cleanup EXIT INT TERM
 
 # Wait for monitoring to complete
-wait $MONITOR_PID
+if [ "$BACKGROUND" = true ]; then
+    echo ""
+    echo "Monitoring started in background (PID: $MONITOR_PID)"
+    echo "Monitor output: tail -f /tmp/fapolicyd_output"
+    echo "Check rules file: tail -f $RULES_FILE" 
+    echo "Stop monitoring: kill $MONITOR_PID"
+    echo ""
+    echo "Monitoring will automatically stop after 1 hour and restore fapolicyd service"
+    
+    # Don't wait - let user use terminal
+    disown $MONITOR_PID
+else
+    wait $MONITOR_PID
+fi
 
 # Restart fapolicyd service and restore enforcing mode
-echo "Restarting fapolicyd service..."
-# Restore original config
-if [ -f /etc/fapolicyd/fapolicyd.conf.backup ]; then
-    mv /etc/fapolicyd/fapolicyd.conf.backup /etc/fapolicyd/fapolicyd.conf
-    echo "Restored original fapolicyd configuration"
-else
-    # Fallback: set to enforcing mode
-    sed -i 's/^permissive.*/permissive = 0/' /etc/fapolicyd/fapolicyd.conf
-    echo "Set fapolicyd to enforcing mode"
-fi
-systemctl restart fapolicyd
-echo "Fapolicyd service restored to normal operation."
+if [ "$BACKGROUND" = false ]; then
+    echo "Restarting fapolicyd service..."
+    # Restore original config
+    if [ -f /etc/fapolicyd/fapolicyd.conf.backup ]; then
+        mv /etc/fapolicyd/fapolicyd.conf.backup /etc/fapolicyd/fapolicyd.conf
+        echo "Restored original fapolicyd configuration"
+    else
+        # Fallback: set to enforcing mode
+        sed -i 's/^permissive.*/permissive = 0/' /etc/fapolicyd/fapolicyd.conf
+        echo "Set fapolicyd to enforcing mode"
+    fi
+    systemctl restart fapolicyd
+    echo "Fapolicyd service restored to normal operation."
 
-echo "Monitoring completed."
+    echo "Monitoring completed."
+fi
