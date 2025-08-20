@@ -72,23 +72,49 @@ read
 
 # Process all current log entries and save directly to fapolicyd rules directory
 echo "Generating rules and saving to fapolicyd rules directory..."
-cat "$DENY_FILE" | fagenrules > "$RULES_OUTPUT_FILE" 2>/dev/null || {
-    echo "ERROR: fagenrules failed to process log entries"
-    echo "This might happen if there are no denials in $DENY_FILE"
-    echo "Try running some applications that get blocked, then run this script again"
-    exit 1
-}
 
-echo "Generated rules saved directly to fapolicyd: $RULES_OUTPUT_FILE"
-echo ""
-echo "=== Generated Rules Preview ==="
-cat "$RULES_OUTPUT_FILE"
-echo ""
-echo "=== End Preview ==="
-echo ""
+# Since fagenrules doesn't generate rules from logs, we'll create a basic template
+# that the user can customize based on their log analysis
+cat > "$RULES_OUTPUT_FILE" << 'EOF'
+# Auto-generated fapolicyd rules template
+# Review and customize these rules based on your application needs
 
-echo "Rules are now active in fapolicyd - no manual loading needed!"
-echo "The normal service restart will pick up the new rules automatically."
+# Example rules - customize as needed:
+# allow perm=execute all : path=/usr/bin/java
+# allow perm=execute all : path=/usr/bin/python3
+# allow perm=open all : dir=/opt/jenkins/
+# allow perm=execute all : dir=/tmp/
+
+EOF
+
+echo "Basic rules template created in: $RULES_OUTPUT_FILE"
+echo "NOTE: fagenrules merges rule files from /etc/fapolicyd/rules.d/"
+echo "It does NOT generate rules from logs automatically."
+echo ""
+echo "To use fagenrules to compile all rules:"
+echo "  fagenrules"
+echo "This will merge all .rules files from /etc/fapolicyd/rules.d/ into /etc/fapolicyd/compiled.rules"
+echo ""
+echo "You need to manually analyze the log file and create appropriate rules."
+echo "Log file location: $DENY_FILE"
+
+# Check if any rules were generated
+if [ -s "$RULES_OUTPUT_FILE" ]; then
+    echo "Rules template saved to: $RULES_OUTPUT_FILE"
+    echo ""
+    echo "=== Rules Template Preview ==="
+    cat "$RULES_OUTPUT_FILE"
+    echo ""
+    echo "=== End Preview ==="
+    echo ""
+    echo "Next steps:"
+    echo "1. Analyze the log file: $DENY_FILE"
+    echo "2. Add appropriate rules to: $RULES_OUTPUT_FILE"
+    echo "3. Run 'fagenrules' to compile all rules from /etc/fapolicyd/rules.d/"
+    echo "4. Configure fapolicyd to use the compiled rules"
+else
+    echo "Failed to create rules template file"
+fi
 
 echo ""
 echo "Temporary log file will be cleaned up automatically"
@@ -98,16 +124,8 @@ echo "Stopping debug-deny fapolicyd and restarting normal service..."
 kill $FAPOLICYD_PID 2>/dev/null || true
 sleep 1
 systemctl start fapolicyd
-echo "Normal fapolicyd service restarted"
 
 echo ""
 echo "Cleaning up deny file..."
 rm -f "$DENY_FILE"
 echo "Deny file removed: $DENY_FILE"
-
-echo ""
-echo "USAGE TIPS:"
-echo "1. Run Jenkins jobs that are getting blocked"
-echo "2. Run this script to generate rules for those denials"
-echo "3. Review and add the generated rules"
-echo "4. Repeat as needed for complete coverage"
