@@ -1,17 +1,30 @@
 #!/bin/bash
 
 # Simple fapolicyd denial monitor and rule generator
-# Usage: ./monitor-fapolicyd.sh [service_name]
+# Usage: ./monitor-fapolicyd.sh
 
-SERVICE="${1:-docker}"
-RULES_FILE="/data/fapolicyd-rules-${SERVICE}.txt"
-LOG_FILE="/data/fapolicyd-debug.log"
-
-# Check root
+# Check root first
 if [[ $EUID -ne 0 ]]; then
    echo "ERROR: Must run as root"
    exit 1
 fi
+
+# Prompt for service name
+read -p "Enter service name to monitor (e.g., docker, jenkins): " SERVICE
+if [[ -z "$SERVICE" ]]; then
+    echo "ERROR: Service name required"
+    exit 1
+fi
+
+# Prompt for rules file path and name
+read -p "Enter path for rules file (default: /data): " RULES_PATH
+RULES_PATH="${RULES_PATH:-/data}"
+
+read -p "Enter rules filename (default: fapolicyd-monitor-${SERVICE}): " RULES_FILENAME
+RULES_FILENAME="${RULES_FILENAME:-fapolicyd-monitor-${SERVICE}}"
+
+RULES_FILE="${RULES_PATH}/${RULES_FILENAME}"
+LOG_FILE="/tmp/fapolicyd-debug.log"
 
 echo "Monitoring fapolicyd denials for: $SERVICE"
 echo "Generated rules will be saved to: $RULES_FILE"
@@ -45,9 +58,7 @@ echo "" >> "$RULES_FILE"
 
 # Monitor for denials
 tail -f "$LOG_FILE" | while read -r line; do
-    if echo "$line" | grep -q 'denied.*path='; then
-        echo "$line" >> "$RULES_FILE"
-        BIN_PATH=$(echo "$line" | sed -n 's/.*path=\([^ ]*\).*/\1/p')
-        echo "Denied: $BIN_PATH"
-    fi
+    echo "$line" >> "$RULES_FILE"
+    BIN_PATH=$(echo "$line" | sed -n 's/.*path=\([^ ]*\).*/\1/p')
+    echo "Denied: $BIN_PATH"
 done
